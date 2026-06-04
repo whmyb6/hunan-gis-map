@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>湖南省高铁与高速地图</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css?nocache=1" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css?nocache=1" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; background: #f5f6fa; }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .header h1 { font-size: 24px; display: flex; align-items: center; gap: 12px; }
+        .header .subtitle { color: #8892b0; font-size: 13px; margin-top: 4px; }
+        
+        .controls { display: flex; gap: 10px; align-items: center; }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #0f4c75; color: white; }
+        .btn-primary:hover { background: #1b6ca8; }
+        .btn-outline { background: transparent; color: #8892b0; border: 1px solid #444; }
+        .btn-outline:hover { color: white; border-color: #fff; }
+        .btn.active { background: #e74c3c; color: white; }
+        
+        .main-container { display: flex; height: calc(100vh - 72px); }
+        
+        .sidebar {
+            width: 320px;
+            background: #1e1e2e;
+            color: #a0a0b0;
+            overflow-y: auto;
+            padding: 20px;
+            border-right: 1px solid #2a2a3e;
+        }
+        .sidebar h3 {
+            color: #e0e0e0;
+            font-size: 14px;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #2a2a3e;
+        }
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            margin: 4px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        .layer-item:hover { background: #2a2a3e; }
+        .layer-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: #e74c3c; }
+        .color-dot { width: 10px; height: 10px; border-radius: 50%; }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 0 0 10px;
+        }
+        .stat-card {
+            background: #252536;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-number { font-size: 20px; font-weight: 700; color: #fff; }
+        .stat-label { font-size: 11px; color: #6c6c8a; margin-top: 4px; }
+        
+        .legend-section { margin: 10px 0; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+        .legend-icon { width: 20px; text-align: center; }
+        
+        #map { flex: 1; background: #0a0a1a; }
+        
+        .popup-title { font-size: 14px; font-weight: bold; color: #1a1a2e; margin-bottom: 5px; }
+        .popup-info { font-size: 12px; color: #555; line-height: 1.6; }
+
+        .hw-route-tooltip {
+            background: #1a1a2e !important;
+            border: 1px solid #444 !important;
+            border-radius: 6px !important;
+            padding: 6px 10px !important;
+            color: #fff !important;
+            font-size: 12px !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.5) !important;
+            white-space: nowrap;
+        }
+        .hw-route-tooltip .leaflet-tooltip-content { margin: 0 !important; line-height: 1.5 !important; }
+        .leaflet-tooltip-left.hw-route-tooltip::before, .leaflet-tooltip-right.hw-route-tooltip::before { display: none !important; }
+        .leaflet-tooltip-top.hw-route-tooltip::before { border-top-color: #1a1a2e !important; }
+        
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        /* 城市名称标签样式 */
+        .city-label-text {
+            white-space: nowrap;
+            font-size: 13px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 4px #000, 0 0 8px #000;
+        }
+        
+        /* 高铁站名标签样式 */
+        .station-label-text {
+            white-space: nowrap;
+            font-size: 9px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 3px #000, 0 0 5px #000;
+            background: rgba(231, 76, 60, 0.8);
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-top: -8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1><i class="fas fa-map-marked-alt"></i> 湖南省交通地图</h1>
+            <div class="subtitle">高铁站点 · 高速收费站 · 市县真实边界</div>
+        </div>
+        <div class="controls">
+            <button class="btn btn-outline" id="btn-rail" onclick="setViewMode('rail')"><i class="fas fa-train"></i> 高铁</button>
+            <button class="btn btn-outline" id="btn-highway" onclick="setViewMode('highway')"><i class="fas fa-road"></i> 高速</button>
+            <button class="btn btn-outline" id="btn-provincial" onclick="setViewMode('provincial')"><i class="fas fa-road"></i> 省道</button>
+            <button class="btn btn-outline" id="btn-all" onclick="setViewMode('all')"><i class="fas fa-layer-group"></i> 全部</button>
+            <button class="btn btn-outline" onclick="fitMapToBounds()" title="地图自适应居中"><i class="fas fa-compress-arrows-alt"></i> 居中</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="city-count">0</div>
+                    <div class="stat-label">地级市</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="station-count">0</div>
+                    <div class="stat-label">高铁站点</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="toll-count">0</div>
+                    <div class="stat-label">收费站</div>
+                </div>
+            </div>
+
+            <h3><i class="fas fa-layer-group"></i> 图层控制</h3>
+            <div class="legend-section" id="layer-controls">
+                <div class="layer-item" onclick="toggleLayer('boundary')">
+                    <input type="checkbox" id="cb-boundary" checked>
+                    <span class="color-dot" style="background:#ff6b6b;border:2px solid #ff6b6b;"></span>
+                    <span>湖南省界</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('cityBoundaries')">
+                    <input type="checkbox" id="cb-cityBoundaries" checked>
+                    <span class="color-dot" style="background:#3498db;opacity:0.5;"></span>
+                    <span>地市行政区</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('cities')">
+                    <input type="checkbox" id="cb-cities" checked>
+                    <span class="legend-icon"><i class="fas fa-city" style="color:#3498db;"></i></span>
+                    <span>地级市</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('rail')">
+                    <input type="checkbox" id="cb-rail" checked>
+                    <span class="legend-icon"><i class="fas fa-train" style="color:#e74c3c;"></i></span>
+                    <span>高铁线路(虚线)与站点</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('highway')">
+                    <input type="checkbox" id="cb-highway" checked>
+                    <span class="legend-icon"><i class="fas fa-road" style="color:#f39c12;"></i></span>
+                    <span>高速收费站</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('routes')">
+                    <input type="checkbox" id="cb-routes" checked>
+                    <span class="legend-icon"><i class="fas fa-route" style="color:#2ecc71;"></i></span>
+                    <span>高速路线(实线)</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('provincial')">
+                    <input type="checkbox" id="cb-provincial" checked>
+                    <span class="legend-icon"><i class="fas fa-road" style="color:#9b59b6;"></i></span>
+                    <span>省道路线</span>
+                </div>
+                <div class="layer-item" onclick="toggleLayer('provincialStations')">
+                    <input type="checkbox" id="cb-provincialStations" checked>
+                    <span class="legend-icon"><i class="fas fa-map-pin" style="color:#9b59b6;"></i></span>
+                    <span>省道收费站/服务区</span>
+                </div>
+            </div>
+
+            <h3><i class="fas fa-subway"></i> 高铁线路</h3>
+            <div class="legend-section" id="rail-legend"></div>
+
+            <h3><i class="fas fa-road"></i> 高速路线</h3>
+            <div class="legend-section" id="highway-legend"></div>
+
+            <h3><i class="fas fa-road"></i> 省道路线</h3>
+            <div class="legend-section" id="provincial-legend"></div>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 初始化地图
+        const map = L.map('map', {
+            center: [27.8, 112.0],
+            zoom: 7,
+            zoomControl: true,
+            attributionControl: true
+        });
+
+        // 深色地图底图
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap & CartoDB',
+            subdomains: 'abcd',
+            maxZoom: 18
+        }).addTo(map);
+
+        // 图层组
+        const layers = {
+            boundary: L.layerGroup().addTo(map),
+            cityBoundaries: L.layerGroup().addTo(map),
+            cities: L.layerGroup().addTo(map),
+            rail: L.layerGroup().addTo(map),
+            highway: L.layerGroup().addTo(map),
+            routes: L.layerGroup().addTo(map),
+            provincial: L.layerGroup().addTo(map),
+            provincialStations: L.layerGroup().addTo(map)
+        };
+
+        // 高速收费站自定义图标
+        const tollIcon = L.divIcon({
+            className: 'toll-marker',
+            html: '<div style="background:#f39c12; color:#fff; border:2px solid #fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:bold;">收</div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        // 服务区自定义图标
+        const serviceIcon = L.divIcon({
+            className: 'service-marker',
+            html: '<div style="background:#3498db; color:#fff; border:2px solid #fff; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:bold;">服</div>',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+        });
+        
+        // 高铁站点自定义图标
+        const railIcon = L.divIcon({
+            className: 'rail-marker',
+            html: '<div style="background:#e74c3c; color:#fff; border:2px solid #fff; border-radius:50%; width:16px; height:16px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:bold;">高</div>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+
+        // 加载数据
+        async function loadData() {
+            try {
+                // 三个主要接口
+                const [gisRes, hbRes, cityBRes, routesRes] = await Promise.all([
+                    fetch('/api/gis-data'),
+                    fetch('/api/province-boundary'),
+                    fetch('/api/city-boundaries'),
+                    fetch('/api/highway-routes')
+                ]);
+                
+                const gisData = await gisRes.json();
+                const provinceBoundary = await hbRes.json();
+                const cityBoundaries = await cityBRes.json();
+                const routes = await routesRes.json();
+
+                // 统计计数器
+                let stationCount = 0;
+                let tollCount = 0;
+
+                // 1. 渲染湖南省真实边界
+                if (provinceBoundary && (provinceBoundary.geometry || provinceBoundary.features)) {
+                    const provinceLayer = L.geoJSON(provinceBoundary, {
+                        style: {
+                            color: '#ff6b6b',
+                            weight: 3,
+                            fillColor: '#ff6b6b',
+                            fillOpacity: 0.05,
+                            dashArray: '5, 5'
+                        }
+                    });
+                    layers.boundary.addLayer(provinceLayer);
+                    window._boundaryLayer = provinceLayer; // 保存引用给居中按钮使用
+                }
+
+                // 2. 渲染各地级市真实行政边界
+                if (cityBoundaries && cityBoundaries.features) {
+                    const palette = [
+                        '#3498db','#e67e22','#9b59b6','#e74c3c',
+                        '#16a085','#f39c12','#2ecc71','#1abc9c',
+                        '#d35400','#c0392b','#2980b9','#8e44ad',
+                        '#27ae60','#34495e'
+                    ];
+                    
+                    cityBoundaries.features.forEach((feature, index) => {
+                        const color = palette[index % palette.length];
+                        const cityLayer = L.geoJSON(feature, {
+                            style: {
+                                color: color,
+                                weight: 1.5,
+                                fillColor: color,
+                                fillOpacity: 0.1
+                            }
+                        });
+                        // 悬浮显示地市名称
+                        cityLayer.bindTooltip(feature.properties.name);
+                        layers.cityBoundaries.addLayer(cityLayer);
+                    });
+                }
+
+                // 3. 渲染城市中心点
+                if (gisData.cities) {
+                    gisData.cities.forEach(city => {
+                        // 城市标记
+                        const marker = L.marker([city.lat, city.lon], {
+                            icon: L.divIcon({
+                                className: 'city-marker',
+                                html: `<div style="background:#3498db; color:#fff; border:2px solid #fff; border-radius:50%; width:18px; height:18px; display:flex; align-items:center; justify-content:center; font-size:7px; font-weight:bold;">市</div>`,
+                                iconSize: [18, 18],
+                                iconAnchor: [9, 9]
+                            })
+                        });
+                        const popupContent = `
+                            <div class="popup-title">${city.name}</div>
+                            <div class="popup-info">
+                                中心坐标: ${city.lat.toFixed(4)}, ${city.lon.toFixed(4)}<br>
+                                行政级别: ${city.level === 'city' ? '地级市' : '县级市'}
+                            </div>
+                        `;
+                        marker.bindPopup(popupContent);
+                        layers.cities.addLayer(marker);
+
+                        // 城市名称标签（白色粗体）
+                        const label = L.divIcon({
+                            className: 'city-label',
+                            html: `<div class="city-label-text">${city.name}</div>`,
+                            iconSize: [100, 16],
+                            iconAnchor: [50, -16]
+                        });
+                        const labelMarker = L.marker([city.lat, city.lon], { icon: label });
+                        layers.cities.addLayer(labelMarker);
+                    });
+                }
+
+                // 4. 渲染高铁线路(标准铁路黑白相间图式) + 站点
+                if (gisData.high_speed_rail && gisData.high_speed_rail.lines) {
+                    const railLegend = document.getElementById('rail-legend');
+                    gisData.high_speed_rail.lines.forEach(line => {
+                        // 使用插值平滑坐标画线（如存在），否则用站点连线
+                        const coords = line.coordinates || line.stations.map(s => [s.lat, s.lon]);
+                        // 底层：白色宽线（白段从此处显色）
+                        const whiteBase = L.polyline(coords, {
+                            color: '#ffffff',
+                            weight: 6,
+                            opacity: 0.9
+                        }).bindTooltip('<b>🚄 ' + line.name + '</b>', {
+                            direction: 'top',
+                            sticky: true,
+                            opacity: 0.95,
+                            className: 'hw-route-tooltip'
+                        });
+                        layers.rail.addLayer(whiteBase);
+                        // 彩色断线覆盖（白+彩色交替 = 铁路标准图式）
+                        const railLine = L.polyline(coords, {
+                            color: line.color,
+                            weight: 6,
+                            opacity: 1.0,
+                            dashArray: '6, 6',    // 等长黑白交替 = 铁路标准图式
+                            lineCap: 'butt'
+                        }).bindTooltip('<b>🚄 ' + line.name + '</b>', {
+                            direction: 'top',
+                            sticky: true,
+                            opacity: 0.95,
+                            className: 'hw-route-tooltip'
+                        });
+                        layers.rail.addLayer(railLine);
+
+                        // 站点 + 站名标签
+                        line.stations.forEach(station => {
+                            // 站点标记
+                            const marker = L.marker([station.lat, station.lon], { icon: railIcon });
+                            const popupContent = `
+                                <div class="popup-title">🚄 ${station.name}站</div>
+                                <div class="popup-info">
+                                    所属线路: <b>${line.name}</b><br>
+                                    坐标: ${station.lat.toFixed(4)}, ${station.lon.toFixed(4)}
+                                </div>
+                            `;
+                            marker.bindPopup(popupContent);
+                            layers.rail.addLayer(marker);
+
+                            // 站名标签（红色小标签）
+                            const label = L.divIcon({
+                                className: 'station-label-icon',
+                                html: `<div class="station-label-text">${station.name}</div>`,
+                                iconSize: [60, 14],
+                                iconAnchor: [30, -18]
+                            });
+                            const labelMarker = L.marker([station.lat, station.lon], { icon: label });
+                            layers.rail.addLayer(labelMarker);
+
+                            stationCount++;
+                        });
+
+                        // 添加到高铁图例
+                        const div = document.createElement('div');
+                        div.className = 'legend-item';
+                        div.innerHTML = `
+                            <span class="color-dot" style="background:${line.color};"></span>
+                            <span>${line.name} <span style="color:#888; font-size:10px;">(标准黑白相间图式)</span></span>
+                        `;
+                        railLegend.appendChild(div);
+                    });
+                }
+
+                // 5. 渲染高速收费站 (国道)
+                if (gisData.highways && gisData.highways.toll_stations) {
+                    gisData.highways.toll_stations.forEach(toll => {
+                        const isProvincial = toll.route && toll.route.startsWith('S');
+                        const targetLayer = isProvincial ? layers.provincialStations : layers.highway;
+                        const marker = L.marker([toll.lat, toll.lon], { icon: isProvincial ? serviceIcon : tollIcon });
+                        const popupContent = `
+                            <div class="popup-title">🛣️ ${toll.name}</div>
+                            <div class="popup-info">
+                                所属路线: <b>${toll.route}</b><br>
+                                坐标: ${toll.lat.toFixed(4)}, ${toll.lon.toFixed(4)}
+                            </div>
+                        `;
+                        marker.bindPopup(popupContent);
+                        targetLayer.addLayer(marker);
+                        if (!isProvincial) tollCount++;
+                    });
+                }
+
+                // 5.5 渲染服务区 (国道 vs 省道分离)
+                if (gisData.highways && gisData.highways.service_areas) {
+                    gisData.highways.service_areas.forEach(sa => {
+                        const isProvincial = sa.route && sa.route.startsWith('S');
+                        const targetLayer = isProvincial ? layers.provincialStations : layers.highway;
+                        const marker = L.marker([sa.lat, sa.lon], { icon: serviceIcon });
+                        const popupContent = `
+                            <div class="popup-title">⛽ ${sa.name}</div>
+                            <div class="popup-info">
+                                所属路线: <b>${sa.route}</b><br>
+                                类型: 服务区/停车区
+                            </div>
+                        `;
+                        marker.bindPopup(popupContent);
+                        targetLayer.addLayer(marker);
+                    });
+                }
+
+                // 6. 渲染高速路线(实线, 无虚线) - 分离国道和省道
+                const highwayLegend = document.getElementById('highway-legend');
+                const provincialLegend = document.getElementById('provincial-legend');
+                Object.keys(routes).forEach(key => {
+                    const route = routes[key];
+                    const coords = route.coords;
+                    const isUnderConstruction = route.name.includes('(在建)');
+                    const isProvincial = key.startsWith('S');
+                    // 实线 vs 虚线 (在建高速用虚线)
+                    const polyline = L.polyline(coords, {
+                        color: route.color,
+                        weight: isUnderConstruction ? 3 : 4,
+                        opacity: isUnderConstruction ? 0.5 : 0.8,
+                        dashArray: isUnderConstruction ? '10, 6' : undefined
+                    }).bindTooltip('<b>🛣️ ' + key + ' ' + route.name + '</b>' +
+                        (isUnderConstruction ? '<br><span style=\"color:#888\">(建设中)</span>' : ''), {
+                        direction: 'top',
+                        sticky: true,
+                        opacity: 0.95,
+                        className: 'hw-route-tooltip'
+                    });
+                    const targetLayer = isProvincial ? layers.provincial : layers.routes;
+                    targetLayer.addLayer(polyline);
+
+                    // --- 沿线分段标注线路编号和名称（起点、1/4、中点、3/4、终点旁）---
+                    const labelPositions = [0.15, 0.5, 0.85]; // 15%、中点、85%处
+                    labelPositions.forEach(pos => {
+                        const idx = Math.floor(coords.length * pos);
+                        const p = coords[Math.min(idx, coords.length - 1)];
+                        const labelDiv = L.divIcon({
+                            className: 'highway-label-inline',
+                            html: `<div style="white-space:nowrap; font-size:9px; font-weight:bold; color:#fff; text-shadow:0 0 3px #000; padding:1px 4px; background:${route.color}cc; border-radius:3px; opacity:0.95; pointer-events:none; font-family:monospace;">${key}</div>`,
+                            iconSize: [40, 14],
+                            iconAnchor: [20, 7]
+                        });
+                        L.marker(p, { icon: labelDiv, interactive: false }).addTo(targetLayer);
+                    });
+
+                    // 省际出省方向标注 (终点 + 方向箭头) - 仅国道
+                    if (!isProvincial) {
+                        const intercityLabels = key === 'G4'    ? '↑湖北/↓广东' :
+                                               key === 'G60'   ? '←江西/→贵州' :
+                                               key === 'G65'   ? '↑重庆/↓广西' :
+                                               key === 'G55'   ? '↑湖北/↓广东' :
+                                               key === 'G0422' ? '↑湖北/↓广东' :
+                                               key === 'G72'   ? '←江西/→广西' :
+                                               key === 'G76'   ? '↑江西/↓广西' :
+                                               key === 'G56'   ? '↑湖北/→浙江' :
+                                               key === 'G6021' ? '↑浙江' :
+                                               key === 'G59'   ? '↑湖北/↓广西' :
+                                               key === 'G5515' ? '↑湖北' :
+                                               key === 'G5513' ? '→重庆(连G50)' :
+                                               key === 'G0421' ? '↑河南/↓广东' :
+                                               null;
+                        
+                        if (intercityLabels) {
+                            const end = coords[coords.length - 1];
+                            const interLabel = L.divIcon({
+                                className: 'route-inter',
+                                html: `<div style="white-space:nowrap; font-size:9px; font-weight:bold; color:#fff; text-shadow:0 0 2px #000; padding:2px 5px; background:rgba(0,0,0,0.65); border:1px solid ${route.color}; border-radius:4px;">↗ ${intercityLabels}</div>`,
+                                iconSize: [90, 18],
+                                iconAnchor: [45, 0]
+                            });
+                            L.marker(end, { icon: interLabel, interactive: false }).addTo(layers.routes);
+                        }
+                    }
+
+                    // 添加到对应图例
+                    const div = document.createElement('div');
+                    div.className = 'legend-item';
+                    div.innerHTML = `
+                        <span class="color-dot" style="background:${route.color}; ${isUnderConstruction ? 'opacity:0.5;border:1px dashed #aaa;' : ''}"></span>
+                        <span><b>${key}</b> ${route.name} <span style="color:#888; font-size:10px;">${isUnderConstruction ? '虚线(在建)' : '实线'}</span></span>
+                    `;
+                    const targetLegend = isProvincial ? provincialLegend : highwayLegend;
+                    targetLegend.appendChild(div);
+                });
+
+                // 更新统计
+                if (gisData.high_speed_rail && gisData.high_speed_rail.lines) {
+                    const uniqueStations = new Set();
+                    gisData.high_speed_rail.lines.forEach(line => {
+                        line.stations.forEach(s => uniqueStations.add(s.name));
+                    });
+                    document.getElementById('station-count').textContent = uniqueStations.size;
+                }
+                document.getElementById('toll-count').textContent = tollCount;
+
+                if (gisData.cities) {
+                    document.getElementById('city-count').textContent = gisData.cities.length;
+                }
+
+                // 自动缩放以显示全省
+                if (provinceBoundary && layers.boundary.getLayers()[0]) {
+                    map.fitBounds(layers.boundary.getLayers()[0].getBounds().pad(0.1));
+                }
+
+                window._mapDataLoaded = true;
+            } catch (err) {
+                console.error('加载数据失败:', err);
+                window._mapDataLoaded = true;
+            }
+        }
+
+        // 图层切换
+        function toggleLayer(name) {
+            const checkbox = document.getElementById(`cb-${name}`);
+            checkbox.checked = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                map.addLayer(layers[name]);
+            } else {
+                map.removeLayer(layers[name]);
+            }
+        }
+
+        // 视图模式设置
+        let currentView = 'all';  // 'all' / 'rail' / 'highway' / 'provincial'
+        
+        const viewConfigs = {
+            'all':        { boundary:true, cityBoundaries:true, cities:true, rail:true, highway:true, routes:true, provincial:true, provincialStations:true },
+            'rail':       { boundary:true, cityBoundaries:true, cities:true, rail:true, highway:false, routes:false, provincial:false, provincialStations:false },
+            'highway':    { boundary:true, cityBoundaries:true, cities:true, rail:false, highway:true, routes:true, provincial:false, provincialStations:false },
+            'provincial': { boundary:true, cityBoundaries:true, cities:true, rail:false, highway:false, routes:false, provincial:true, provincialStations:true }
+        };
+        
+        function setViewMode(mode) {
+            currentView = mode;
+            const config = viewConfigs[mode];
+            
+            Object.keys(layers).forEach(name => {
+                const checkbox = document.getElementById(`cb-${name}`);
+                if (checkbox && name in config) {
+                    checkbox.checked = config[name];
+                    if (config[name]) {
+                        map.addLayer(layers[name]);
+                    } else {
+                        map.removeLayer(layers[name]);
+                    }
+                }
+            });
+            
+            // 更新按钮样式
+            document.getElementById('btn-rail').className = mode === 'rail' ? 'btn btn-primary' : 'btn btn-outline';
+            document.getElementById('btn-highway').className = mode === 'highway' ? 'btn btn-primary' : 'btn btn-outline';
+            document.getElementById('btn-provincial').className = mode === 'provincial' ? 'btn btn-primary' : 'btn btn-outline';
+            document.getElementById('btn-all').className = mode === 'all' ? 'btn btn-primary' : 'btn btn-outline';
+        }
+        
+        // 删除旧版的 toggleAllLayers（功能已整合到 setViewMode）
+        function toggleAllLayers() {
+            setViewMode(currentView === 'all' ? 'rail' : 'all');
+        }
+
+        // 全图显示
+        function fitMapToBounds() {
+            console.log('居中函数被调用');  // 调试用
+            if (window._boundaryLayer && window._boundaryLayer.getBounds) {
+                map.fitBounds(window._boundaryLayer.getBounds(), { padding: [60, 60], maxZoom: 12, animate: true, duration: 1 });
+            } else if (layers.cityBoundaries && layers.cityBoundaries.getBounds) {
+                map.fitBounds(layers.cityBoundaries.getBounds(), { padding: [60, 60], maxZoom: 12, animate: true, duration: 1 });
+            } else {
+                map.setView([27.8, 112.0], 7);
+            }
+        }
+
+        // 启动
+        loadData();
+    </script>
+</body>
+</html>
