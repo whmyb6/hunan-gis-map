@@ -5,3 +5,5 @@ __pycache__/
 *.bak
 .env
 .DS_Store
+cache/
+geojson/
